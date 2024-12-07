@@ -8,11 +8,17 @@ from attrdict import AttrDict
 p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 p.setGravity(0, 0, -10)
+p.resetDebugVisualizerCamera( # Set the camera view
+    cameraDistance=2.0,    # Zoom level (2 meters away)
+    cameraYaw=45,          # 45 degrees rotation around the vertical axis
+    cameraPitch=-30,       # Tilt 30 degrees downward
+    cameraTargetPosition=[0, 0, 0]  # Focus on the origin (0, 0, 0)
+)
 
 # Load the KUKA robot and environment objects
 kuka_id = p.loadSDF("kuka_iiwa/kuka_with_gripper.sdf")[0]
-p.loadURDF("tray/tray.urdf", [0.5, 0, 0], [0, 0, 1, 0])
-p.loadURDF("block.urdf", [0.4, 0, 0.01], [0, 0, 0, 1])
+p.loadURDF("tray/tray.urdf", [0.6, 0, 0], [0, 0, 1, 0])
+p.loadURDF("block.urdf", [0.45, 0, 0.01], [0, 0, 0, 1])
 eff_index = 7  # TODO
 
 # Initialize the joints dictionary
@@ -128,17 +134,30 @@ def execute_trajectory(time_step, duration, start_pos, final_pos, start_orientat
 
 # Function to control the gripper
 def control_gripper(gripper_opening_angle):
-    gripper_joints = ["right_base_tip_joint", "left_base_tip_joint"]
 
-    for joint_name in gripper_joints:
-        joint = joints[joint_name]
-        p.setJointMotorControl2(
-            bodyUniqueId=kuka_id,
-            jointIndex=joint.id,
-            controlMode=p.POSITION_CONTROL,
-            targetPosition=gripper_opening_angle * (-1 if "left" in joint_name else 1),
-            force=50
-        )
+    poses = []
+    indexes = []
+    forces = []
+
+    gripper_joints = ["base_left_finger_joint", "base_right_finger_joint", "right_base_tip_joint", "left_base_tip_joint"]
+    joint_angles = np.array([0., 0., gripper_opening_angle, -gripper_opening_angle])
+
+    for i, name in enumerate(gripper_joints):
+        joint = joints[name]
+        # print("\n\n\n\n\n", i, "    ", joint)
+        poses.append(joint_angles[i])
+        indexes.append(joint.id)
+        forces.append(joint.maxForce)
+
+    p.setJointMotorControlArray(
+        kuka_id,indexes,
+        controlMode=p.POSITION_CONTROL,
+        targetPositions=joint_angles,
+        targetVelocities=[0]*4,
+        positionGains=[0.05]*4,
+        forces=[50.]*4
+    )
+
 
 time_step = .1  # TODO
 
@@ -152,7 +171,10 @@ second_orientation = np.array([0., np.pi, 0.])
 def main():
 
     duration = 10
-    execute_trajectory(time_step, duration, start_pos, second_pos, start_orientation, second_orientation)
+    # execute_trajectory(time_step, duration, start_pos, second_pos, start_orientation, second_orientation)
+
+    set_joint_angles([0., np.pi/6, 0., -np.pi, 0., np.pi/6, np.pi/2])
+    control_gripper(gripper_opening_angle=1.)  # 0.: close
 
     # while True:
     #     # Example: Move to a specific set of joint angles
