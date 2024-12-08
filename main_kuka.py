@@ -206,6 +206,28 @@ def wait_for_reaching_joint_angles(desired_joint_angles, tolerance=0.01):
         time.sleep(1 / 240)
 
 
+def get_block_state(block_id):
+
+    position, orientation = p.getBasePositionAndOrientation(block_id)
+    orientation_euler = p.getEulerFromQuaternion(orientation)
+    linear_velocity, angular_velocity = p.getBaseVelocity(block_id)
+
+    # print(f"Position: {position}")
+    # print(f"Orientation (Quaternion): {orientation}")
+    print(f"Orientation (Euler): {orientation_euler}")
+    # print(f"Linear Velocity: {linear_velocity}")
+    # print(f"Angular Velocity: {angular_velocity}")
+    print()
+
+    # return {
+    #     "position": position,
+    #     "orientation_quaternion": orientation,
+    #     "orientation_euler": orientation_euler,
+    #     "linear_velocity": linear_velocity,
+    #     "angular_velocity": angular_velocity,
+    # }
+
+
 time_step = .1  # TODO
 
 start_pos = np.array([0., 0., 1.305])  # home position, up-right
@@ -235,6 +257,9 @@ def main():
 
     while True:
         # print(get_joint_angles("gripper"))
+
+        get_block_state(cuboid_blue_id)
+
         p.stepSimulation()
         time.sleep(1 / 240)
 
