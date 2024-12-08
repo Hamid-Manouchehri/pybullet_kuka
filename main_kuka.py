@@ -17,9 +17,9 @@ p.resetDebugVisualizerCamera( # Set the camera view
 
 # Load the KUKA robot and environment objects
 kuka_id = p.loadSDF("kuka_iiwa/kuka_with_gripper.sdf")[0]
+cuboid_blue_id = p.loadURDF("block.urdf", [0.47, 0, 0.01], [0, 0, 0, 1])
 p.loadURDF("tray/tray.urdf", [0.6, 0, 0], [0, 0, 1, 0])
-cuboid_blue_id = p.loadURDF("block.urdf", [0.45, 0, 0.01], [0, 0, 0, 1])
-eff_index = 7  # TODO
+eff_index = 7
 
 # Initialize the joints dictionary
 joints = AttrDict()
@@ -93,11 +93,19 @@ def get_current_pose():
     return (position, orientation)
 
 
-def get_joint_angles():
+def get_joint_angles(kuka_or_gripper=None):
     "revolute joints: kuka + gripper"
     j = p.getJointStates(kuka_id, [0, 1, 2, 3, 4, 5, 6, 8, 10, 11, 13])
     joints = [i[0] for i in j]
-    return joints
+
+    if kuka_or_gripper == 'kuka':
+        return joints[:7]
+    
+    elif kuka_or_gripper == 'gripper':
+       return joints[7:]
+
+    else:
+        return joints
 
 
 def execute_task_space_trajectory(time_step, duration, start_pos, final_pos, start_orientation, final_orientation):
@@ -113,7 +121,7 @@ def execute_task_space_trajectory(time_step, duration, start_pos, final_pos, sta
 
         position_1 = position_path(t, duration, start_pos, final_pos)
         orientation_1 = orientation_path(t, duration, start_orientation, final_orientation)
-        
+
         all_joint_angles = calculate_ik(position_1, orientation_1)
         ur5_joint_angles = all_joint_angles[:7]  # Use the first 6 joints for UR5
 
@@ -133,30 +141,55 @@ def execute_task_space_trajectory(time_step, duration, start_pos, final_pos, sta
             print("End-effector reached the target position.")
             print(f"Current position: {get_current_pose()[0]}, Target position: {final_orientation}")
             print("\n\n\ntrajectory completed!\n\n\n")
-            control_gripper(gripper_opening_angle=0.1)  # 0.: close
             break
 
         p.stepSimulation()
 
 
-def execute_gripper(base_tip_joints_angle):
+def execute_gripper(time_step, start_angle, final_angle, duration=1):
+    """
+    Smoothly open or close the gripper by interpolating the gripper opening angle.
 
-    joint_angle_threshold = 0.01  # TODO
+    Args:
+        time_step (float): Time increment for each simulation step.
+        duration (float): Total duration for the gripper motion (in seconds).
+        start_angle (float): Initial gripper opening angle.
+        final_angle (float): Final gripper opening angle.
+    """
+    t = 0
+    gripper_joints = ["base_left_finger_joint", "base_right_finger_joint", "right_base_tip_joint", "left_base_tip_joint"]
 
-    control_gripper(base_tip_joints_angle)
+    while t <= duration:
+        # Interpolate the gripper angle
+        interpolated_angle = start_angle + (final_angle - start_angle) * (t / duration)
+        joint_angles = np.array([0., 0., interpolated_angle, -interpolated_angle])
 
-    while True:
+        # Set joint angles for the gripper
+        poses = []
+        indexes = []
+        forces = []
 
-        left_base_tip_joint = get_joint_angles()[8]
-        right_base_tip_joint = get_joint_angles()[10]
+        for i, name in enumerate(gripper_joints):
+            joint = joints[name]
+            poses.append(joint_angles[i])
+            indexes.append(joint.id)
+            forces.append(joint.maxForce)
 
-        if np.linalg.norm(abs(np.array([left_base_tip_joint, right_base_tip_joint])) - 
-        abs(np.array([base_tip_joints_angle, base_tip_joints_angle]))) < joint_angle_threshold:
-            print("\ngripper's fingers are set to desired position!\n")
-            break
+        p.setJointMotorControlArray(
+            kuka_id, indexes,
+            controlMode=p.POSITION_CONTROL,
+            targetPositions=joint_angles,
+            targetVelocities=[0.]*4,
+            positionGains=[0.05]*4,
+            forces=[50.]*4
+        )
 
+        # Step the simulation and increment time
         p.stepSimulation()
+        t += time_step
+        time.sleep(time_step)
 
+    print("Gripper trajectory completed.")
 
 
 def wait_for_reaching_joint_angles(desired_joint_angles, tolerance=0.01):
@@ -171,42 +204,6 @@ def wait_for_reaching_joint_angles(desired_joint_angles, tolerance=0.01):
         # print(f"Error: {error}")  # Optional: Debugging information
         p.stepSimulation()
         time.sleep(1 / 240)
-
-
-
-# Function to control the gripper
-def control_gripper(gripper_opening_angle):
-
-    poses = []
-    indexes = []
-    forces = []
-
-    gripper_joints = ["base_left_finger_joint", "base_right_finger_joint", "right_base_tip_joint", "left_base_tip_joint"]
-    joint_angles = np.array([0., 0., gripper_opening_angle, -gripper_opening_angle])
-
-    for i, name in enumerate(gripper_joints):
-        joint = joints[name]
-        # print("\n\n\n\n\n", i, "    ", joint)
-        poses.append(joint_angles[i])
-        indexes.append(joint.id)
-        forces.append(joint.maxForce)
-
-    # print("joint angles: ", joint_angles, "indixes: ", indexes)
-
-    p.setJointMotorControlArray(
-        kuka_id,indexes,
-        controlMode=p.POSITION_CONTROL,
-        targetPositions=joint_angles,
-        targetVelocities=[0]*4,
-        positionGains=[0.05]*4,
-        forces=[50.]*4
-    )
-
-
-def is_object_grasped(gripper_id, object_id):
-    
-    contact_points = p.getContactPoints(bodyA=gripper_id, bodyB=object_id)
-    return len(contact_points) > 0
 
 
 time_step = .1  # TODO
@@ -227,16 +224,17 @@ def main():
 
     set_joint_angles(des_kuka_joint_angle)
     wait_for_reaching_joint_angles(des_kuka_joint_angle)
-    execute_gripper(.5)  # 0.: close
+    execute_gripper(time_step, 0., .3, duration=5)
+
 
     duration = 20
     execute_task_space_trajectory(time_step, duration, second_pos, third_pos, third_orientation, third_orientation)
-    execute_gripper(0.1)  # 0.: close
+    execute_gripper(time_step, .3, -.05, duration=5)
     execute_task_space_trajectory(time_step, duration, third_pos, second_pos, third_orientation, third_orientation)
 
 
     while True:
-        # print(get_joint_angles()[:7])  # Kuka joint angles
+        # print(get_joint_angles("gripper"))
         p.stepSimulation()
         time.sleep(1 / 240)
 
