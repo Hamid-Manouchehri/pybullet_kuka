@@ -7,6 +7,8 @@ from attrdict import AttrDict
 # Connect to PyBullet and set up the environment
 p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
+# p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)  # Hides the PyBullet GUI
+
 p.setGravity(0, 0, -10)
 p.resetDebugVisualizerCamera( # Set the camera view
     cameraDistance=1.0,    # Zoom level (2 meters away)
@@ -16,10 +18,14 @@ p.resetDebugVisualizerCamera( # Set the camera view
 )
 
 # Load the KUKA robot and environment objects
-kuka_id = p.loadSDF("kuka_iiwa/kuka_with_gripper.sdf")[0]
-cuboid_blue_id = p.loadURDF("block.urdf", [0.47, 0, 0.01], [0, 0, 0, 1])
-p.loadURDF("tray/tray.urdf", [0.6, 0, 0], [0, 0, 1, 0])
+planeId = p.loadURDF("plane.urdf")
+cuboid_green_id = p.loadURDF("block.urdf", [0.44, 0, 0.01], [0, 0, 0, 1])
+kuka_id = p.loadURDF("kuka_iiwa/kuka_with_prismatic_gripper.urdf")
+
 eff_index = 7
+
+numJoints = p.getNumJoints(kuka_id)
+print("joint ID:\n\n\n", numJoints)
 
 # Initialize the joints dictionary
 joints = AttrDict()
@@ -55,7 +61,9 @@ def calculate_ik(position, orientation):
 
 # Function to set joint angles
 def set_joint_angles(joint_angles):
-    control_joints = ["J0", "J1", "J2", "J3", "J4", "J5", "J6"]
+    control_joints = ["lbr_iiwa_joint_1", "lbr_iiwa_joint_2", "lbr_iiwa_joint_3",
+                      "lbr_iiwa_joint_4", "lbr_iiwa_joint_5", "lbr_iiwa_joint_6",
+                      "lbr_iiwa_joint_7"]
     poses = []
     indexes = []
     forces = []
@@ -90,25 +98,25 @@ def orientation_path(t, t_max, start_orient, end_orient):
 def get_current_pose():
     linkstate = p.getLinkState(kuka_id, eff_index, computeForwardKinematics=True)
     position, orientation = linkstate[0], linkstate[1]
-    return (position, orientation)
+    return (position, p.getEulerFromQuaternion(orientation))
 
 
 def get_joint_angles(kuka_or_gripper=None):
     "revolute joints: kuka + gripper"
-    j = p.getJointStates(kuka_id, [0, 1, 2, 3, 4, 5, 6, 8, 10, 11, 13])
+    j = p.getJointStates(kuka_id, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     joints = [i[0] for i in j]
 
     if kuka_or_gripper == 'kuka':
-        return joints[:7]
+        return joints[:7]  # [0, 1, 2, 3, 4, 5, 6]
     
     elif kuka_or_gripper == 'gripper':
-       return joints[7:]
+       return joints[8:]  # [8, 9]
 
     else:
         return joints
 
 
-def execute_task_space_trajectory(time_step, duration, start_pos, final_pos, start_orientation, final_orientation):
+def execute_task_space_trajectory(time_step, duration, start_pos, final_pos):
 
     t = 0
     position_tolerance = 0.005
@@ -119,8 +127,8 @@ def execute_task_space_trajectory(time_step, duration, start_pos, final_pos, sta
 
     while True:
 
-        position_1 = position_path(t, duration, start_pos, final_pos)
-        orientation_1 = orientation_path(t, duration, start_orientation, final_orientation)
+        position_1 = position_path(t, duration, start_pos[0], final_pos[0])
+        orientation_1 = orientation_path(t, duration, start_pos[1], start_pos[1])
 
         all_joint_angles = calculate_ik(position_1, orientation_1)
         ur5_joint_angles = all_joint_angles[:7]  # Use the first 6 joints for UR5
@@ -137,32 +145,36 @@ def execute_task_space_trajectory(time_step, duration, start_pos, final_pos, sta
 
         t += time_step
 
-        if np.linalg.norm(np.array(get_current_pose()[0]) - np.array(final_pos)) < position_tolerance:
+        if np.linalg.norm(np.array(get_current_pose()[0]) - np.array(final_pos[0])) < position_tolerance:
             print("End-effector reached the target position.")
-            print(f"Current position: {get_current_pose()[0]}, Target position: {final_orientation}")
+            print(f"Current position: {get_current_pose()[0]}, Target position: {final_pos[1]}")
             print("\n\n\ntrajectory completed!\n\n\n")
             break
+
+        print("obj tilt angle: ", get_object_state(cuboid_green_id)[1])  # object tilt angle (rad)
 
         p.stepSimulation()
 
 
-def execute_gripper(time_step, start_angle, final_angle, duration=1):
+def execute_gripper(time_step, init_pos, fin_pos, duration=1):
     """
     Smoothly open or close the gripper by interpolating the gripper opening angle.
 
     Args:
         time_step (float): Time increment for each simulation step.
         duration (float): Total duration for the gripper motion (in seconds).
-        start_angle (float): Initial gripper opening angle.
-        final_angle (float): Final gripper opening angle.
+        init_pos (float): Initial gripper opening distance.
+        fin_pos (float): Final gripper opening distance.
     """
     t = 0
-    gripper_joints = ["base_left_finger_joint", "base_right_finger_joint", "right_base_tip_joint", "left_base_tip_joint"]
+    position_tolerance = 0.006
+    gripper_joints = ["left_finger_sliding_joint", "right_finger_sliding_joint"]
 
-    while t <= duration:
+    while True:
         # Interpolate the gripper angle
-        interpolated_angle = start_angle + (final_angle - start_angle) * (t / duration)
-        joint_angles = np.array([0., 0., interpolated_angle, -interpolated_angle])
+        interpolated_dist = init_pos + (fin_pos - init_pos) * (t / duration)
+        # fingers_pos = np.array([-interpolated_dist, interpolated_dist])
+        fingers_pos = np.array([-fin_pos, fin_pos])
 
         # Set joint angles for the gripper
         poses = []
@@ -171,18 +183,24 @@ def execute_gripper(time_step, start_angle, final_angle, duration=1):
 
         for i, name in enumerate(gripper_joints):
             joint = joints[name]
-            poses.append(joint_angles[i])
+            poses.append(fingers_pos[i])
             indexes.append(joint.id)
             forces.append(joint.maxForce)
 
         p.setJointMotorControlArray(
             kuka_id, indexes,
             controlMode=p.POSITION_CONTROL,
-            targetPositions=joint_angles,
-            targetVelocities=[0.]*4,
-            positionGains=[0.05]*4,
-            forces=[50.]*4
+            targetPositions=fingers_pos,
+            targetVelocities=[0.]*2,
+            positionGains=[0.05]*2,
+            forces=[50.]*2
         )
+
+        if np.linalg.norm(np.array(get_joint_angles("gripper")) - fingers_pos) < position_tolerance:
+            print("End-effector reached the target position.")
+            print(f"Current position: {get_current_pose()[0]}, Target position: {fin_pos}")
+            print("\n\n\ntrajectory completed!\n\n\n")
+            break
 
         # Step the simulation and increment time
         p.stepSimulation()
@@ -206,18 +224,17 @@ def wait_for_reaching_joint_angles(desired_joint_angles, tolerance=0.01):
         time.sleep(1 / 240)
 
 
-def get_block_state(block_id):
+def get_object_state(object_id):
 
-    position, orientation = p.getBasePositionAndOrientation(block_id)
+    position, orientation = p.getBasePositionAndOrientation(object_id)
     orientation_euler = p.getEulerFromQuaternion(orientation)
-    linear_velocity, angular_velocity = p.getBaseVelocity(block_id)
+    linear_velocity, angular_velocity = p.getBaseVelocity(object_id)
 
     # print(f"Position: {position}")
     # print(f"Orientation (Quaternion): {orientation}")
-    print(f"Orientation (Euler): {orientation_euler}")
+    # print(f"Orientation (Euler): {orientation_euler}")
     # print(f"Linear Velocity: {linear_velocity}")
     # print(f"Angular Velocity: {angular_velocity}")
-    print()
 
     # return {
     #     "position": position,
@@ -227,38 +244,38 @@ def get_block_state(block_id):
     #     "angular_velocity": angular_velocity,
     # }
 
+    return orientation_euler
+
 
 time_step = .1  # TODO
 
-start_pos = np.array([0., 0., 1.305])  # home position, up-right
-second_pos = np.array([0.41, 0., 0.48])  # on top of the object with distance in z-axis
-third_pos = np.array([0.41, 0., 0.27])  # right on top of the object
-
-start_orientation = np.array([0., 0., 0.])
-second_orientation = np.array([np.pi, 0., np.pi/2])
-third_orientation = np.array([np.pi, 0., np.pi/2])
+## generalized position of end-effector: position + orientation (Euler)
+start_pos = np.array([[0., 0., 1.305], [0., 0., 0.]])  # home position, up-right
+second_pos = np.array([[0.41, 0., 0.48], [-np.pi/2, 0., -np.pi/2]])  # on top of the object with distance in z-axis
+third_pos = np.array([[0.41, 0., 0.14], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
+fourth_pos = np.array([[0.41, 0., 0.24], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
 
 
 def main():
 
-    des_kuka_joint_angle = np.array([0., 0.114, 0., -1.895, 0., 1.13, np.pi/2])  # on top of the object with distance in z-axis
+    des_kuka_joint_angle = np.array([0., 0.114, 0., -1.895, 0., 1.13, 0.])  # on top of the object with distance in z-axis
     # des_kuka_joint_angle = np.array([0., np.pi/6, 0., -2.094, 0., np.pi/6, np.pi/2])  # right on top of the object 
 
     set_joint_angles(des_kuka_joint_angle)
     wait_for_reaching_joint_angles(des_kuka_joint_angle)
-    execute_gripper(time_step, 0., .3, duration=5)
+    execute_gripper(time_step, init_pos=0., fin_pos=.01, duration=1)
 
 
     duration = 20
-    execute_task_space_trajectory(time_step, duration, second_pos, third_pos, third_orientation, third_orientation)
-    execute_gripper(time_step, .3, -.05, duration=5)
-    execute_task_space_trajectory(time_step, duration, third_pos, second_pos, third_orientation, third_orientation)
+    execute_task_space_trajectory(time_step, duration, second_pos, third_pos)
+    execute_gripper(time_step, init_pos=0.01, fin_pos=-.0029, duration=1)
+    execute_task_space_trajectory(time_step, duration, third_pos, fourth_pos)
 
 
     while True:
         # print(get_joint_angles("gripper"))
-
-        get_block_state(cuboid_blue_id)
+        # print(get_current_pose())
+        # print(get_object_state(cuboid_green_id)[1])  # object tilt angle (rad)
 
         p.stepSimulation()
         time.sleep(1 / 240)
