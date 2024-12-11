@@ -12,8 +12,8 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 # Load the KUKA robot and environment objects
 planeId = p.loadURDF("plane.urdf")
-cuboid_green_id = p.loadURDF("block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
-kuka_id = p.loadURDF("kuka_iiwa/kuka_with_prismatic_gripper.urdf")
+cuboid_green_id = p.loadURDF("../block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
+kuka_id = p.loadURDF("../kuka_iiwa/kuka_with_prismatic_gripper.urdf")
 
 p.setGravity(0, 0, -10)
 p.resetDebugVisualizerCamera( # Set the camera view
@@ -203,10 +203,7 @@ def cost_fcn(grip_location):
     return cost
 
 
-def optimization_solver():
-
-    third_pos = np.array([[0.4, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.4, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
+def optimization_solver(third_pos, fourth_pos):
 
     execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
     execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
@@ -215,41 +212,15 @@ def optimization_solver():
     execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
     execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
 
-
-
-    third_pos = np.array([[0.5, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.5, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
-
-    execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-    execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-    execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
-    execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-
-
-    third_pos = np.array([[0.6, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.6, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
-
-    execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-    execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-    execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
-    execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-
-    # while True:
-
-    #     cost_val = cost_fcn(tilt_angle)
 
 
 def main():
 
+    init_grip_location = 0.67  # TODO
+
     ## generalized position of end-effector: position + orientation (Euler)
-    start_pos = np.array([[0., 0., 1.305], [0., 0., 0.]])  # home position, up-right
-    second_pos = np.array([[0.4, 0., 0.48], [-np.pi/2, 0., -np.pi/2]])  # on top of the object with distance in z-axis
-    third_pos = np.array([[0.65, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.65, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
+    third_pos = np.array([[init_grip_location, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
+    fourth_pos = np.array([[init_grip_location, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
 
     init_kuka_joint_angle = np.array([0.]*7)
     des_kuka_joint_angle = np.array([0., 0.114, 0., -1.895, 0., 1.13, 0.])  # on top of the object with distance in z-axis
@@ -259,17 +230,9 @@ def main():
     set_kuka_joint_angles(init_kuka_joint_angle, des_kuka_joint_angle, duration=2)
     execute_gripper(init_pos=0., fin_pos=.01, duration=1)  # open gripper
 
-    optimization_solver()
+    optimization_solver(third_pos, fourth_pos)
 
     print("\n\nend of simulation!\n\n")
-    
-    # while True:
-    #     print(get_current_joint_angles("gripper"))
-    #     print(get_current_eff_pose())
-    #     print(get_object_state(cuboid_green_id)[1])  # object tilt angle (rad)
-
-    #     p.stepSimulation()
-    #     time.sleep(1 / 240)
 
 
 
