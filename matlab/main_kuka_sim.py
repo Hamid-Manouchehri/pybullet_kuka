@@ -1,4 +1,4 @@
-def python_simulator(grip_location):
+def pybullet_simulator(grip_location):
 
     import pybullet as p
     import pybullet_data
@@ -6,9 +6,10 @@ def python_simulator(grip_location):
     import numpy as np
     from attrdict import AttrDict
 
-
     # Connect to PyBullet and set up the environment
-    p.connect(p.DIRECT)
+    p.connect(p.DIRECT)  # for matlab fmincon, TODO
+    # p.connect(p.GUI)  # for realistic visualization, TODO
+    p.resetSimulation()
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     # p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)  # Hides the PyBullet GUI
 
@@ -25,10 +26,9 @@ def python_simulator(grip_location):
         cameraTargetPosition=[0, 0, 0]  # Focus on the origin (0, 0, 0)
     )
 
+    flg_realistic = False  # True: realistic visualization, False: matalb fmincon, TODO
     sim_time_step = 1 / 240  # TODO
     eff_index = 7
-
-    numJoints = p.getNumJoints(kuka_id)  # kuka + gripper
 
     # Initialize the joints dictionary
     joints = AttrDict()
@@ -44,6 +44,7 @@ def python_simulator(grip_location):
             "maxForce": joint_info[10],
             "maxVelocity": joint_info[11],
         })
+
 
     def calculate_ik(position, orientation):
             quaternion = p.getQuaternionFromEuler(orientation)
@@ -88,18 +89,8 @@ def python_simulator(grip_location):
             )
             # print("tilt: ", get_object_state(cuboid_green_id)[1])
             p.stepSimulation()
-            time.sleep(sim_time_step)  # Match real-time simulatio
-
-
-    def position_path(t, t_max, start_pos, end_pos):
-
-        return start_pos + (end_pos - start_pos) * (t / t_max)
-
-
-    def orientation_path(t, t_max, start_orient, end_orient):
-        """ orientation is in Euler. """
-
-        return start_orient + (end_orient - start_orient) * (t / t_max)
+            if flg_realistic == True:
+                time.sleep(sim_time_step)  # Match real-time simulation
 
 
     def get_current_eff_pose():
@@ -167,7 +158,8 @@ def python_simulator(grip_location):
             )
             # print("tilt: ", get_object_state(cuboid_green_id)[1])
             p.stepSimulation()
-            time.sleep(sim_time_step)  # Match real-time simulatio
+            if flg_realistic == True:
+                time.sleep(sim_time_step)  # Match real-time simulation
 
 
     def get_object_state(object_id):
@@ -202,16 +194,16 @@ def python_simulator(grip_location):
     def execute_pick_and_place(third_pos, fourth_pos):
 
         execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-        execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
+        execute_gripper(init_pos=0.01, fin_pos=.00075, duration=.5)  # close gripper
         execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
         tilt_angle = get_object_state(cuboid_green_id)[1]
         execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
         execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
         execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
 
+        # print("max tilt angle in python: ", tilt_angle)
         return tilt_angle
-
-    # grip_location = 0.4  # TODO
+    
 
     ## generalized position of end-effector: position + orientation (Euler)
     third_pos = np.array([[grip_location, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object

@@ -7,6 +7,7 @@ from attrdict import AttrDict
 
 # Connect to PyBullet and set up the environment
 p.connect(p.GUI)
+p.resetSimulation()
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 # p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)  # Hides the PyBullet GUI
 
@@ -25,7 +26,6 @@ p.resetDebugVisualizerCamera( # Set the camera view
 
 sim_time_step = 1 / 240  # TODO
 eff_index = 7
-max_tilt_angle = 0
 
 numJoints = p.getNumJoints(kuka_id)  # kuka + gripper
 
@@ -85,7 +85,7 @@ def set_kuka_joint_angles(init_joint_angles, des_joint_angles, duration):
             targetPositions=q_t,
             forces=forces
         )
-        print("tilt: ", get_object_state(cuboid_green_id)[1])
+        # print("tilt: ", get_object_state(cuboid_green_id)[1])
         p.stepSimulation()
         time.sleep(sim_time_step)  # Match real-time simulatio
 
@@ -164,7 +164,7 @@ def execute_gripper(init_pos, fin_pos, duration=1):
             targetPositions=q_t,
             forces=forces
         )
-        print("tilt: ", get_object_state(cuboid_green_id)[1])
+        # print("tilt: ", get_object_state(cuboid_green_id)[1])
         p.stepSimulation()
         time.sleep(sim_time_step)  # Match real-time simulatio
 
@@ -197,79 +197,40 @@ def interpolate_trajectory(q_start, q_end, duration):
     return trajectory
 
 
-def cost_fcn(grip_location):
-    
-    cost = max_tilt_angle * grip_location
-    return cost
+def execute_pick_and_place(third_pos, fourth_pos):
 
+        execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=1)
+        execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
+        execute_task_space_trajectory(third_pos, fourth_pos, duration=1)
+        tilt_angle = get_object_state(cuboid_green_id)[1]
+        execute_task_space_trajectory(fourth_pos, third_pos, duration=1)
+        execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
+        execute_task_space_trajectory(third_pos, fourth_pos, duration=1)
 
-def optimization_solver():
-
-    third_pos = np.array([[0.4, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.4, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
-
-    execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-    execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-    execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
-    execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-
-
-
-    third_pos = np.array([[0.5, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.5, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
-
-    execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-    execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-    execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
-    execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-
-
-    third_pos = np.array([[0.6, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.6, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
-
-    execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-    execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-    execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
-    execute_gripper(init_pos=0., fin_pos=.01, duration=.5)  # open gripper
-    execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
-
-    # while True:
-
-    #     cost_val = cost_fcn(tilt_angle)
+        return tilt_angle
 
 
 def main():
 
+    tilt_angle = .55 # tehta: .001
+
     ## generalized position of end-effector: position + orientation (Euler)
     start_pos = np.array([[0., 0., 1.305], [0., 0., 0.]])  # home position, up-right
     second_pos = np.array([[0.4, 0., 0.48], [-np.pi/2, 0., -np.pi/2]])  # on top of the object with distance in z-axis
-    third_pos = np.array([[0.65, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[0.65, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
+    third_pos = np.array([[tilt_angle, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
+    fourth_pos = np.array([[tilt_angle, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
 
     init_kuka_joint_angle = np.array([0.]*7)
     des_kuka_joint_angle = np.array([0., 0.114, 0., -1.895, 0., 1.13, 0.])  # on top of the object with distance in z-axis
-    # des_kuka_joint_angle = np.array([0., np.pi/6, 0., -2.094, 0., np.pi/6, np.pi/2])  # right on top of the object 
 
     ## initial configuration:
     set_kuka_joint_angles(init_kuka_joint_angle, des_kuka_joint_angle, duration=2)
     execute_gripper(init_pos=0., fin_pos=.01, duration=1)  # open gripper
 
-    optimization_solver()
+    max_tilt_angle = execute_pick_and_place(third_pos, fourth_pos)
 
-    print("\n\nend of simulation!\n\n")
-    
-    # while True:
-    #     print(get_current_joint_angles("gripper"))
-    #     print(get_current_eff_pose())
-    #     print(get_object_state(cuboid_green_id)[1])  # object tilt angle (rad)
-
-    #     p.stepSimulation()
-    #     time.sleep(1 / 240)
+    # print("\n\nmax tilt angle: ", max_tilt_angle)
+    # print("\n\nend of simulation!\n\n")
 
 
 
