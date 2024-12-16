@@ -13,7 +13,7 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 # Load the KUKA robot and environment objects
 planeId = p.loadURDF("plane.urdf")
-cuboid_green_id = p.loadURDF("block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
+cuboid_green_id = p.loadURDF("./object/block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
 kuka_id = p.loadURDF("kuka_iiwa/kuka_with_prismatic_gripper.urdf")
 
 p.setGravity(0, 0, -10)
@@ -175,14 +175,6 @@ def get_object_state(object_id):
     orientation_euler = p.getEulerFromQuaternion(orientation)
     linear_velocity, angular_velocity = p.getBaseVelocity(object_id)
 
-    # return {
-    #     "position": position,
-    #     "orientation_quaternion": orientation,
-    #     "orientation_euler": orientation_euler,
-    #     "linear_velocity": linear_velocity,
-    #     "angular_velocity": angular_velocity,
-    # }
-
     return orientation_euler
 
 
@@ -215,8 +207,6 @@ def main():
     tilt_angle = .55 # tehta: .001
 
     ## generalized position of end-effector: position + orientation (Euler)
-    start_pos = np.array([[0., 0., 1.305], [0., 0., 0.]])  # home position, up-right
-    second_pos = np.array([[0.4, 0., 0.48], [-np.pi/2, 0., -np.pi/2]])  # on top of the object with distance in z-axis
     third_pos = np.array([[tilt_angle, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
     fourth_pos = np.array([[tilt_angle, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
 
@@ -227,11 +217,13 @@ def main():
     set_kuka_joint_angles(init_kuka_joint_angle, des_kuka_joint_angle, duration=2)
     execute_gripper(init_pos=0., fin_pos=.01, duration=1)  # open gripper
 
-    max_tilt_angle = execute_pick_and_place(third_pos, fourth_pos)
+    execute_pick_and_place(third_pos, fourth_pos)
+    
 
-    # print("\n\nmax tilt angle: ", max_tilt_angle)
-    # print("\n\nend of simulation!\n\n")
-
+    while True:
+        p.stepSimulation()
+        time.sleep(sim_time_step)
+        pass
 
 
 if __name__ == '__main__':

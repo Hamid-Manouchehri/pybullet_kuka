@@ -15,7 +15,7 @@ def pybullet_simulator(grip_location):
 
     # Load the KUKA robot and environment objects
     planeId = p.loadURDF("plane.urdf")
-    cuboid_green_id = p.loadURDF("../block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
+    cuboid_green_id = p.loadURDF("../object/in_homogeneous_block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
     kuka_id = p.loadURDF("../kuka_iiwa/kuka_with_prismatic_gripper.urdf")
 
     p.setGravity(0, 0, -10)
@@ -168,14 +168,6 @@ def pybullet_simulator(grip_location):
         orientation_euler = p.getEulerFromQuaternion(orientation)
         linear_velocity, angular_velocity = p.getBaseVelocity(object_id)
 
-        # return {
-        #     "position": position,
-        #     "orientation_quaternion": orientation,
-        #     "orientation_euler": orientation_euler,
-        #     "linear_velocity": linear_velocity,
-        #     "angular_velocity": angular_velocity,
-        # }
-
         return orientation_euler
 
 
@@ -194,7 +186,7 @@ def pybullet_simulator(grip_location):
     def execute_pick_and_place(third_pos, fourth_pos):
 
         execute_task_space_trajectory(get_current_eff_pose(), third_pos, duration=2)
-        execute_gripper(init_pos=0.01, fin_pos=.00075, duration=.5)  # close gripper
+        execute_gripper(init_pos=0.01, fin_pos=.00085, duration=.5)  # close gripper
         execute_task_space_trajectory(third_pos, fourth_pos, duration=2)
         tilt_angle = get_object_state(cuboid_green_id)[1]
         execute_task_space_trajectory(fourth_pos, third_pos, duration=2)
@@ -207,11 +199,10 @@ def pybullet_simulator(grip_location):
 
     ## generalized position of end-effector: position + orientation (Euler)
     third_pos = np.array([[grip_location, 0., 0.08], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object, ready to grip the object
-    fourth_pos = np.array([[grip_location, 0., 0.2], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
+    fourth_pos = np.array([[grip_location, 0., 0.15], [-np.pi/2, 0., -np.pi/2]])  # right on top of the object
 
     init_kuka_joint_angle = np.array([0.]*7)
     des_kuka_joint_angle = np.array([0., 0.114, 0., -1.895, 0., 1.13, 0.])  # on top of the object with distance in z-axis
-    # des_kuka_joint_angle = np.array([0., np.pi/6, 0., -2.094, 0., np.pi/6, np.pi/2])  # right on top of the object 
 
     ## initial configuration:
     set_kuka_joint_angles(init_kuka_joint_angle, des_kuka_joint_angle, duration=2)
