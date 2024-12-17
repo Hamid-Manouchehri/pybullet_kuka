@@ -6,15 +6,19 @@ def pybullet_simulator(grip_location):
     import numpy as np
     from attrdict import AttrDict
 
-    # Connect to PyBullet and set up the environment
     p.connect(p.DIRECT)  # for matlab fmincon, TODO
     # p.connect(p.GUI)  # for realistic visualization, TODO
     p.resetSimulation()
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     # p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)  # Hides the PyBullet GUI
 
+    flg_realistic = False  # True: realistic visualization, False: matalb fmincon, TODO
+    sim_time_step = 1 / 240  # TODO
+    eff_index = 7
+
     # Load the KUKA robot and environment objects
     planeId = p.loadURDF("plane.urdf")
+    # cuboid_green_id = p.loadURDF("../object/block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])  # TODO
     cuboid_green_id = p.loadURDF("../object/in_homogeneous_block.urdf", [0.54, 0, 0.02], [0, 0, 0, 1])
     kuka_id = p.loadURDF("../kuka_iiwa/kuka_with_prismatic_gripper.urdf")
 
@@ -25,10 +29,6 @@ def pybullet_simulator(grip_location):
         cameraPitch=-40,       # Tilt 30 degrees downward
         cameraTargetPosition=[0, 0, 0]  # Focus on the origin (0, 0, 0)
     )
-
-    flg_realistic = False  # True: realistic visualization, False: matalb fmincon, TODO
-    sim_time_step = 1 / 240  # TODO
-    eff_index = 7
 
     # Initialize the joints dictionary
     joints = AttrDict()
